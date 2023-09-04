@@ -17,7 +17,7 @@ from sqlalchemy.ext.automap import automap_base
 
 # reflect an existing database into a new model
 Base = automap_base()
-engine = create_engine("sqlite:///Resources/hawaii.sqlite")
+engine = create_engine("sqlite:///SurfsUp/Resources/hawaii.sqlite")
 
 # reflect the tables
 Base.prepare(engine, reflect=True)
@@ -43,64 +43,72 @@ app = Flask(__name__)
 @app.route("/")
 def welcome():
     return (
-        f"Hawaii Weather Data: Available routes: </br>"
-        f"/api/v1.0/preciptation </br>"
-        f"/api/v1.0/stations </br>"
-        f"/api/v1.0/tobs </br>"
-        f"/api/v1.0/<start> </br>"
-        "/api/v1.0/<start>/<end>"
+        f"<h1><b> Hawaii Weather Data </b></h1>"
+        f"<h2><b> Available routes:</b></h2> </br>"
+        f"<b> Precipitation Data: </b> /api/v1.0/precipitation </br>"
+        f"<b> Observed Stations: </b> /api/v1.0/stations </br>"
+        f"<b> Temperature Observations: </b> /api/v1.0/tobs </br>"
+        f"<b> Temperature data for a specific date (add date YYYY-MM-DD):</b> /api/v1.0/<start> </br>"
+        f"<b> Temperature data fo a range of dates (add start and end dates YYYY-MM-DD/YYYY-MM-DD): </b> /api/v1.0/<start><end>"
     )
 
 # Define the participation route
 @app.route("/api/v1.0/precipitation")
-def get_precipitation():
+def precipitation():
     # Calculate one year ago from the most recent date
     # Starting from the most recent data point in the database. 
-    most_recent_date_str = session.query(Measurement.date).order_by(Measurement.date.desc()).first()[0]
+    most_recent_date_str = session.query(measurement.date).order_by(measurement.date.desc()).first()[0]
     most_recent_date = datetime.strptime(most_recent_date_str, '%Y-%m-%d')
 
 # Calculate the date one year from the last date in data set.
     one_yr_ago = most_recent_date - timedelta(days=365)
 
 # Perform a query to retrieve the data and precipitation scores
-    results = session.query(Measurement.date, Measurement.prcp).\
-        filter(Measurement.date >= one_yr_ago).\
-        order_by(Measurement.date).all()    
+    results = session.query(measurement.date, measurement.prcp).\
+        filter(measurement.date >= one_yr_ago).\
+        order_by(measurement.date).all()  
+
+    session.close()  
     
     # Convert query results to dictionary
     precipitation_dates = []
     precipitation_totals = []
 
-    for date, total in precipitation:
+    for date, total in results:
         precipitation_dates.append(date)
         precipitation_totals.append(total)
     
-    precipitation_dict = dict(precipitation_dates, precipitation_totals)
+    precipitation_dict = dict(zip(precipitation_dates, precipitation_totals))
 
     
     return jsonify(precipitation_dict)
 
+
 # Define the stations route
 @app.route("/api/v1.0/stations")
 def stations():
-    sel = [measurement.station]
-    active = session.query(*sel).\
-        group_by(measurement.station).all()
+    session = Session(engine)
     
-    list_of_stations = list(np.ravel(active))
-    return jsonify(list_of_stations)
+    stations = session.query(station.name, station.station).all()
+    
+    session.close()
+
+    station_list = [{"name": name, "station": station} for name, station in stations]
+    
+    return jsonify(station_list)
     
 
 # # Define the temperature observations route
 @app.route("/api/v1.0/tobs")
 def tobs():
+    session = Session(engine)
+    
+    temps = session.query(measurement.date, measurement.tobs).\
+        filter(measurement.date >= '2016-08-23').\
+        filter(measurement.station == 'USC00519281').\
+        all()
 
-    start_date = '2016-08-23'
-    sel = [measurement.date, measurement.tobs]
-    temps = session.query(*sel).\
-        filter(measurement.date >= start_date, measurement.station == 'USC00519281').\
-        group_by(measurement.date).\
-        order_by(measurement.date).all()
+    session.close()
 
 # Extract temperature values from the query results
     observation_dates = []
@@ -110,42 +118,49 @@ def tobs():
         observation_dates.append(date)
         temp_observe.append(observation)
 
-        tobs_dict = dict(observation_dates, temp_observe)
+        tobs_dict = dict(zip(observation_dates, temp_observe))
         return jsonify(tobs_dict)
 
 
 # Define the temperature summary route
 @app.route("/api/v1.0/<start>")
-@app.route("/api/v1.0/<start>/<end>")
-def temp_summary(start_date, end_date=None):
+def start(start):
+    session = Session(engine)
 
+    results = (session.query(func.min(measurement.tobs), func.max(measurement.tobs), func.avg(measurement.tobs)).\
+               filter(measurement.date >= start).\
+               all()
+               )
+    
+    (min, max, avg) = results[0]
+
+    session.close()
+
+    return jsonify(f"Start date: {start}", f"Lowest Temperature: {min} F", f"Highest Temperature:  {max} F", f"Average Temperature: {avg} F")
+
+
+@app.route("/api/v1.0/<start>/<end>")
+def temp_summary(start, end):
+    session = Session(engine)
     
     query_result = session.query(
             func.min(measurement.tobs),
             func.avg(measurement.tobs),
             func.max(measurement.tobs)).\
-                filter(measurement.date >= start_date).filter(measurement.date <= end_date).all()
+            filter(measurement.date >= start).\
+            filter(measurement.date <= end).\
+            all()
 
 
     #create dictionary list
-    temp_stats = []
+    (min, max, avg) = query_result[0]
 
-    for min_temp, avg_temp, max_temp in query_result:
-        temp_dict = {
-            "start_date": start_date.strftime('%Y-%m-%d'),
-            "end_date": end_date.strftime('%Y-%m-%d'),
-            "TempMIN": min_temp,
-            "TempAVG": avg_temp,
-            "TempMAX": max_temp
-        }
-        temp_stats.append(temp_dict)
-
-    return jsonify(temp_stats)
-
-session.close()
+    session.close()
 
 
-
+    return jsonify(f"Start date: {start}", 
+                   f"End date: {end}", 
+                   f"Lowest Temperature: {min} F", f"Highest Temperature: {max} F", f"Average Temperature: {avg} F")
 
 
 if __name__ == '__main__':
