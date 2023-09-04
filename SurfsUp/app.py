@@ -7,7 +7,6 @@ from flask import Flask, jsonify
 from datetime import datetime, timedelta
 import pandas as pd
 
-
 #################################################
 # Database Setup
 #################################################
@@ -15,9 +14,10 @@ from sqlalchemy import create_engine, func
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.automap import automap_base
 
+
 # reflect an existing database into a new model
-engine = create_engine("sqlite:///hawaii.sqlite")
 Base = automap_base()
+engine = create_engine("sqlite:///Resources/hawaii.sqlite")
 
 # reflect the tables
 Base.prepare(engine, reflect=True)
@@ -36,17 +36,18 @@ app = Flask(__name__)
 
 #################################################
 # Flask Routes
-#################################################
+############################
+
 # Define the home route
 
 @app.route("/")
 def welcome():
     return (
-        "Hawaii Weather Data: Available routes:\n"
-        "/api/v1.0/preciptation\n"
-        "/api/v1.0/stations\n"
-        "/api/v1.0/tobs\n"
-        "/api/v1.0/<start>\n"
+        f"Hawaii Weather Data: Available routes: </br>"
+        f"/api/v1.0/preciptation </br>"
+        f"/api/v1.0/stations </br>"
+        f"/api/v1.0/tobs </br>"
+        f"/api/v1.0/<start> </br>"
         "/api/v1.0/<start>/<end>"
     )
 
@@ -54,12 +55,17 @@ def welcome():
 @app.route("/api/v1.0/precipitation")
 def get_precipitation():
     # Calculate one year ago from the most recent date
-    start_date = '2016-08-23'
-    sel = [measurement.date, func.sum(measurement.prcp)]
-    precipitation = session.query(*sel).\
-        filter(measurement.date >= start_date).\
-        group_by(measurement.date).\
-        order_by(measurement.date).all()
+    # Starting from the most recent data point in the database. 
+    most_recent_date_str = session.query(Measurement.date).order_by(Measurement.date.desc()).first()[0]
+    most_recent_date = datetime.strptime(most_recent_date_str, '%Y-%m-%d')
+
+# Calculate the date one year from the last date in data set.
+    one_yr_ago = most_recent_date - timedelta(days=365)
+
+# Perform a query to retrieve the data and precipitation scores
+    results = session.query(Measurement.date, Measurement.prcp).\
+        filter(Measurement.date >= one_yr_ago).\
+        order_by(Measurement.date).all()    
     
     # Convert query results to dictionary
     precipitation_dates = []
@@ -77,7 +83,7 @@ def get_precipitation():
 # Define the stations route
 @app.route("/api/v1.0/stations")
 def stations():
-    sel = [mesaurement.station]
+    sel = [measurement.station]
     active = session.query(*sel).\
         group_by(measurement.station).all()
     
@@ -97,21 +103,21 @@ def tobs():
         order_by(measurement.date).all()
 
 # Extract temperature values from the query results
-observation_dates = []
-temp_observe = []
+    observation_dates = []
+    temp_observe = []
 
-for date, observation in temps:
-    observation_dates.append(date)
-    temp_observe.append(observation)
+    for date, observation in temps:
+        observation_dates.append(date)
+        temp_observe.append(observation)
 
-tobs_dict = dict(observation_dates, temp_observe)
+        tobs_dict = dict(observation_dates, temp_observe)
+        return jsonify(tobs_dict)
 
-return jsonify(tobs_dict)
 
 # Define the temperature summary route
 @app.route("/api/v1.0/<start>")
 @app.route("/api/v1.0/<start>/<end>")
-def temp_summary(start_date, end=None):
+def temp_summary(start_date, end_date=None):
 
     
     query_result = session.query(
@@ -138,11 +144,9 @@ def temp_summary(start_date, end=None):
 
 session.close()
 
+
+
+
+
 if __name__ == '__main__':
     app.run(debug=True)
-
-
-
-
-
-    
