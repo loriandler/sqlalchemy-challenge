@@ -38,7 +38,7 @@ app = Flask(__name__)
 # Flask Routes
 ############################
 
-# Define the home route
+# Define the home routes
 
 @app.route("/")
 def welcome():
@@ -70,7 +70,7 @@ def precipitation():
 
     session.close()  
     
-    # Convert query results to dictionary
+# Convert query results to dictionary
     precipitation_dates = []
     precipitation_totals = []
 
@@ -80,7 +80,7 @@ def precipitation():
     
     precipitation_dict = dict(zip(precipitation_dates, precipitation_totals))
 
-    
+ # jsonify the results
     return jsonify(precipitation_dict)
 
 
@@ -88,13 +88,16 @@ def precipitation():
 @app.route("/api/v1.0/stations")
 def stations():
     session = Session(engine)
-    
+
+# Query the station names  
     stations = session.query(station.name, station.station).all()
     
     session.close()
 
+# create list of stations
     station_list = [{"name": name, "station": station} for name, station in stations]
-    
+
+# jsnoify the results    
     return jsonify(station_list)
     
 
@@ -102,7 +105,8 @@ def stations():
 @app.route("/api/v1.0/tobs")
 def tobs():
     session = Session(engine)
-    
+
+#Query the temperature observations (tobs)    
     temps = session.query(measurement.date, measurement.tobs).\
         filter(measurement.date >= '2016-08-23').\
         filter(measurement.station == 'USC00519281').\
@@ -119,10 +123,12 @@ def tobs():
         temp_observe.append(observation)
 
         tobs_dict = dict(zip(observation_dates, temp_observe))
+
+# jsonify the results
         return jsonify(tobs_dict)
 
 
-# Define the temperature summary route
+# Define the temperature summary route for a particular date
 @app.route("/api/v1.0/<start>")
 def start(start):
     session = Session(engine)
@@ -131,18 +137,22 @@ def start(start):
                filter(measurement.date >= start).\
                all()
                )
-    
+
+# create list of the temperatures    
     (min, max, avg) = results[0]
 
     session.close()
 
-    return jsonify(f"Start date: {start}", f"Lowest Temperature: {min} F", f"Highest Temperature:  {max} F", f"Average Temperature: {avg} F")
+# jsnoify the results
+    return jsonify(f"Start date: {start}", f"Lowest Temperature: {min} degrees F", f"Highest Temperature:  {max} degrees F", f"Average Temperature: {avg} degrees F")
 
-
+# Define the summaries for start and end dates
 @app.route("/api/v1.0/<start>/<end>")
 def temp_summary(start, end):
     session = Session(engine)
     
+
+# query the max, min, avg temperature observations
     query_result = session.query(
             func.min(measurement.tobs),
             func.avg(measurement.tobs),
@@ -152,16 +162,16 @@ def temp_summary(start, end):
             all()
 
 
-    #create dictionary list
-    (min, max, avg) = query_result[0]
+#create dictionary list
+    (min, avg, max) = query_result[0]
 
     session.close()
 
-
+#jsnoify the results
     return jsonify(f"Start date: {start}", 
                    f"End date: {end}", 
-                   f"Lowest Temperature: {min} F", f"Highest Temperature: {max} F", f"Average Temperature: {avg} F")
+                   f"Lowest Temperature: {min} degrees F", f"Highest Temperature: {max} degrees F", f"Average Temperature: {avg} degrees F")
 
-
+# end the flask code
 if __name__ == '__main__':
     app.run(debug=True)
